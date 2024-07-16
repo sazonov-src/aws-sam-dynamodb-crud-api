@@ -1,0 +1,184 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: CRUD Catalog App with Models using AWS SAM
+
+Parameters:
+  AdminUserPool:
+    Type: String
+    Description: The Cognito User Pool ID for admin users.
+  CustomerUserPool:
+    Type: String
+    Description: The Cognito User Pool ID for customer users.
+
+Globals:
+  Function:
+    Runtime: python3.9
+    CodeUri: ./src
+
+Resources:
+  CatalogTable:
+    Type: AWS::DynamoDB::Table
+    Properties: 
+      TableName: CatalogTable
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+
+  GetCatalogFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.get_catalog
+      MemorySize: 128
+      Timeout: 10
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CatalogTable
+      Events:
+        GetCatalog:
+          Type: Api
+          Properties:
+            Path: /catalog
+            Method: get
+            RestApiId: !Ref CustomerApi
+        GetCatalogItemAdmin:
+          Type: Api
+          Properties:
+            Path: /catalog
+            Method: get
+            RestApiId: !Ref AdminApi
+
+  GetCatalogItemFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.get_catalog_item
+      MemorySize: 128
+      Timeout: 10
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CatalogTable
+      Events:
+        GetCatalogItem:
+          Type: Api
+          Properties:
+            Path: /catalog/{id}
+            Method: get
+            RestApiId: !Ref CustomerApi
+        GetCatalogItemAdmin:
+          Type: Api
+          Properties:
+            Path: /catalog/{id}
+            Method: get
+            RestApiId: !Ref AdminApi
+
+  CreateCatalogItemFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.create_catalog_item
+      MemorySize: 128
+      Timeout: 10
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CatalogTable
+      Events:
+        CreateCatalogItem:
+          Type: Api
+          Properties:
+            Path: /catalog
+            Method: post
+            RestApiId: !Ref AdminApi
+            RequestModel:
+              Model: CatalogItemModel
+              Required: true
+              ValidateBody: true
+
+  UpdateCatalogItemFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.update_catalog_item
+      MemorySize: 128
+      Timeout: 10
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CatalogTable
+      Events:
+        UpdateCatalogItem:
+          Type: Api
+          Properties:
+            Path: /catalog/{id}
+            Method: put
+            RestApiId: !Ref AdminApi
+            RequestModel:
+              Model: CatalogItemModel
+              Required: true
+              ValidateBody: true
+
+  DeleteCatalogItemFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.deleteCatalogItem
+      MemorySize: 128
+      Timeout: 10
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CatalogTable
+      Events:
+        DeleteCatalogItem:
+          Type: Api
+          Properties:
+            Path: /catalog/{id}
+            Method: delete
+            RestApiId: !Ref AdminApi
+
+  AdminApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: AdminApi
+      Description: "Catalog API Gateway for Admin API"
+      StageName: prod
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn: !Sub arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${AdminUserPool}
+      Models:
+        CatalogItemModel:
+          type: object
+          properties:
+            name:
+              type: string
+            description:
+              type: string
+            price:
+              type: integer
+          required:
+            - name
+            - price
+
+  CustomerApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: CustomerApi
+      Description: "Catalog API Gateway for Customer API"
+      StageName: prod
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn: !Sub arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${CustomerUserPool}
+
+
+Outputs:
+  AdminApiUrl:
+    Description: "API Gateway endpoint URL for the Admin API"
+    Value: !Sub "https://${AdminApi}.execute-api.${AWS::Region}.amazonaws.com"
+
+  CustomerApiUrl:
+    Description: "API Gateway endpoint URL for the Customer API"
+    Value: !Sub "https://${CustomerApi}.execute-api.${AWS::Region}.amazonaws.com"
+
